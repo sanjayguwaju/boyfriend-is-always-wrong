@@ -663,3 +663,24 @@ details.cfg summary { cursor: pointer; font-weight: 700; font-size: 0.9rem; padd
   color: var(--ink);
   box-shadow: 0 4px 0 rgba(0,0,0,0.1);
 }
+
+/* ── Stage Ring Loader ───────────────────────────────────────────────────── */
+.stage-ring-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  z-index: 5;
+  background: rgba(27, 16, 48, 0.75);
+  pointer-events: none;
+}
+.stage-ring-loader .spin-glove {
+  font-size: 2.2rem;
+  animation: loader-pulse 0.8s ease-in-out infinite;
+}

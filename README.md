@@ -45,20 +45,24 @@ boyfriend-is-always-wrong/
 ├── index.html                  # Entry HTML (SEO + OG meta tags)
 ├── vite.config.js              # Build config (chunking, target, sourcemaps)
 ├── netlify.toml                # Netlify deploy config (SPA redirect, headers, caching)
+├── public/
+│   └── models/
+│       ├── shreeja.glb         # Mixamo 3D character (idle, punch) - 1.05 MB
+│       └── sanjay.glb          # Mixamo 3D character (idle, hit, defeated) - 1.20 MB
+├── fbx/                        # Raw Mixamo FBX source files
+├── scripts/
+│   └── convert_models.js       # FBX to GLB + meshopt optimization pipeline
 └── src/
     ├── main.jsx                # React root mount
-    ├── App.jsx                 # Game state, punch logic, KO flow, sorry bubble
+    ├── App.jsx                 # Game state, phase machine, punch logic, KO flow
     ├── styles.css              # Global styles + responsive layout + dark mode
-    ├── components/
-    │   ├── Stats.jsx           # Punches / combo / sorries / best score display
-    │   ├── PatienceBar.jsx     # HP bar (fills → KO)
-    │   ├── Stage.jsx           # 3D canvas container + overlay tags + POW effects
-    │   ├── Setup.jsx           # Name inputs + photo upload UI
-    │   └── WinModal.jsx        # KO victory screen
+    ├── components/             # Stats, PatienceBar, Stage, Header, MuteButton, etc.
+    ├── screens/                # LobbyScreen, CountdownScreen, KOScreen
     ├── game/
-    │   ├── createGame.js       # Three.js ring, fighters, animation loop, particles
-    │   ├── faces.js            # Canvas face textures (emoji default + photo upload)
-    │   └── sound.js            # Web Audio API beeps
+    │   ├── createGame.js       # Three.js GLTF characters, animation mixers, ring
+    │   ├── faces.js            # Canvas face textures attached to head bones
+    │   ├── sound.js            # Web Audio API sound FX
+    │   └── phases.js           # Game phase state machine constants
     ├── data/
     │   └── lines.js            # Boyfriend's sorry lines + KO line + POW words
     └── utils/

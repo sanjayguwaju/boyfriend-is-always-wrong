@@ -1,18 +1,26 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { createFace, drawFace } from './faces.js';
 
 // Match the flat, bright look of the original prototype.
 THREE.ColorManagement.enabled = false;
 
-const GX = -1.7; // Shreeja's start x
-const BX = 1.7; // Sanjay's start x
+const GX = -1.6; // Shreeja's ring position
+const BX = 1.6;  // Sanjay's ring position
 const BOY_FACES = ['👨', '😅', '😬', '😣', '😖', '😫'];
 
 /**
- * Creates the 3D boxing ring and both fighters inside `container`.
- * `overlay` holds DOM nodes the engine positions every frame: { gTag, bTag, bubble }.
+ * Creates the 3D boxing ring and loads the Mixamo characters.
+ * overlay: { gTag, bTag, bubble }
  */
 export function createGame(container, overlay, { onImpact, onReady }) {
+  // Loading indicator inside the stage
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'stage-ring-loader';
+  loadingEl.innerHTML = '<span class="spin-glove">🥊</span><span>Loading ring...</span>';
+  container.appendChild(loadingEl);
+
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -23,11 +31,12 @@ export function createGame(container, overlay, { onImpact, onReady }) {
   scene.fog = new THREE.Fog(0x1b1030, 14, 28);
   const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 60);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+  // Lighting
+  scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
   sun.position.set(3, 8, 6);
   scene.add(sun);
-  const spot = new THREE.PointLight(0xff8fb8, 0.6, 20);
+  const spot = new THREE.PointLight(0xff8fb8, 0.7, 20);
   spot.position.set(0, 5, 3);
   scene.add(spot);
 
@@ -42,104 +51,152 @@ export function createGame(container, overlay, { onImpact, onReady }) {
   // Ring: apron, canvas, posts, ropes
   box(11, 0.3, 8, 0x2b2f8f, 0, -0.35, 0);
   box(9, 0.3, 6, 0xe11d63, 0, -0.05, 0);
-  [[-4.3, -2.8], [4.3, -2.8], [-4.3, 2.8], [4.3, 2.8]].forEach(([x, z]) => {
+  [
+    [-4.3, -2.8],
+    [4.3, -2.8],
+    [-4.3, 2.8],
+    [4.3, 2.8],
+  ].forEach(([x, z]) => {
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.6, 12), mat(0xfafafa));
     p.position.set(x, 1.2, z);
     scene.add(p);
   });
-  [0.8, 1.4, 2].forEach((y) => {
+  [0.8, 1.4, 2.0].forEach((y) => {
     box(8.6, 0.07, 0.07, 0xffffff, 0, y, -2.8);
     box(0.07, 0.07, 5.6, 0xffffff, -4.3, y, 0);
     box(0.07, 0.07, 5.6, 0xffffff, 4.3, y, 0);
   });
 
-  function fighter({ top, shorts, skin, hair, glove, face, girl }) {
-    const g = new THREE.Group();
-    const add = (geo, m, x, y, z, parent = g) => {
-      const mesh = new THREE.Mesh(geo, m);
-      mesh.position.set(x, y, z);
-      parent.add(mesh);
-      return mesh;
-    };
-    const leg = (x) =>
-      add(new THREE.CylinderGeometry(girl ? 0.1 : 0.17, girl ? 0.09 : 0.15, 0.8, 12), mat(skin), x, 0.4, 0);
-    leg(girl ? -0.15 : -0.25);
-    leg(girl ? 0.15 : 0.25);
-
-    if (girl) {
-      add(new THREE.CylinderGeometry(0.3, 0.7, 0.6, 24), mat(shorts), 0, 0.95, 0); // skirt
-      add(new THREE.CylinderGeometry(0.33, 0.28, 0.8, 16), mat(top), 0, 1.62, 0);
-    } else {
-      add(new THREE.CylinderGeometry(0.5, 0.46, 0.5, 16), mat(shorts), 0, 0.93, 0);
-      add(new THREE.CylinderGeometry(0.58, 0.44, 0.9, 16), mat(top), 0, 1.55, 0);
-    }
-
-    const head = new THREE.Group();
-    head.position.set(0, 2.3, 0);
-    g.add(head);
-    add(new THREE.SphereGeometry(0.5, 24, 18), mat(skin), 0, 0, 0, head).scale.set(girl ? 0.95 : 1.06, 1.05, 0.82);
-    add(new THREE.SphereGeometry(0.53, 24, 18), mat(hair), 0, girl ? 0.06 : 0.1, -0.1, head).scale.set(
-      girl ? 1.02 : 1.06,
-      girl ? 1.05 : 0.95,
-      0.85
-    );
-
-    if (girl) {
-      add(new THREE.SphereGeometry(0.5, 16, 14), mat(hair), 0, -0.5, -0.3, head).scale.set(1, 1.2, 0.5);
-      [-1, 1].forEach((s) =>
-        add(new THREE.SphereGeometry(0.3, 12, 10), mat(hair), s * 0.46, -0.3, -0.05, head).scale.set(0.5, 1.5, 0.6)
-      );
-      const bow = mat(0xff4d8d);
-      add(new THREE.SphereGeometry(0.15, 10, 8), bow, 0.3, 0.45, 0.25, head);
-      add(new THREE.SphereGeometry(0.15, 10, 8), bow, 0.55, 0.4, 0.25, head);
-      add(new THREE.SphereGeometry(0.09, 10, 8), mat(0xffffff), 0.43, 0.43, 0.3, head);
-    }
-
-    const fm = new THREE.MeshBasicMaterial({ map: face.t, transparent: true });
-    add(new THREE.CircleGeometry(0.43, 40), fm, 0, -0.02, 0.4, head);
-
-    const arms = [-1, 1].map((s) => {
-      const p = new THREE.Group();
-      p.position.set(s * (girl ? 0.45 : 0.72), girl ? 1.85 : 1.93, 0);
-      g.add(p);
-      const r = girl ? 0.075 : 0.13;
-      add(new THREE.CylinderGeometry(r, r, 0.7, 10), mat(skin), 0, -0.35, 0, p);
-      add(new THREE.SphereGeometry(girl ? 0.2 : 0.25, 14, 12), mat(glove, 0.4), 0, -0.78, 0, p);
-      return p;
-    });
-    scene.add(g);
-    return { g, head, fm, arms };
-  }
-
+  // Face textures
   const gFace = createFace('g');
   const bFace = createFace('b');
-  const girl = fighter({
-    top: 0xff5c9a, shorts: 0x6a1b9a, skin: 0xf1c7a5, hair: 0x2a1a14, glove: 0xff2d87, face: gFace, girl: true,
-  });
-  const boy = fighter({
-    top: 0x2e86de, shorts: 0x263238, skin: 0xe0b48f, hair: 0x1b1b1b, glove: 0x1565c0, face: bFace, girl: false,
-  });
-  girl.g.position.x = GX;
-  girl.g.rotation.y = 0.45;
-  girl.g.scale.setScalar(0.95);
-  boy.g.position.x = BX;
-  boy.g.rotation.y = -0.45;
-  boy.g.scale.setScalar(1.1);
-  girl.arms.forEach((a) => (a.rotation.x = -1.1));
-
   drawFace(gFace);
   drawFace(bFace);
 
-  // ---- state ----
-  let pt = -1; // punch progress, -1 = idle
+  const gFaceMat = new THREE.MeshBasicMaterial({ map: gFace.t, transparent: true, side: THREE.DoubleSide });
+  const bFaceMat = new THREE.MeshBasicMaterial({ map: bFace.t, transparent: true, side: THREE.DoubleSide });
+
+  // Glove mesh helper
+  const makeGlove = (color) => {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(14, 16, 14),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.1 })
+    );
+  };
+
+  // Animation states & references
+  let shreejaMixer = null;
+  let sanjayMixer = null;
+  let shreejaActions = {};
+  let sanjayActions = {};
+  let shreejaHeadBone = null;
+  let sanjayHeadBone = null;
+  let shreejaGloveBone = null;
+  let shreejaRoot = null;
+  let sanjayRoot = null;
+  let modelsLoaded = false;
+
+  let isPunching = false;
+  let punchProgress = 0;
+  let punchDuration = 1.033;
   let hitDone = false;
-  let ht = 0; // hit reaction, 1 -> 0
+  let ht = 0; // hit reaction 1 -> 0
   let shk = 0; // camera shake
   let ko = false;
-  let mood = 0; // 0..1 patience used
-  let t0 = 0;
+  let mood = 0;
   let boyKey = '';
-  let raf = 0;
+
+  const gltfLoader = new GLTFLoader();
+  gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
+  // Load models in parallel
+  Promise.all([
+    new Promise((resolve, reject) => gltfLoader.load('/models/shreeja.glb', resolve, undefined, reject)),
+    new Promise((resolve, reject) => gltfLoader.load('/models/sanjay.glb', resolve, undefined, reject)),
+  ])
+    .then(([shreejaGltf, sanjayGltf]) => {
+      // Setup Shreeja
+      shreejaRoot = shreejaGltf.scene;
+      shreejaRoot.position.set(GX, 0, 0);
+      shreejaRoot.rotation.y = 1.15; // 3/4 facing Sanjay and camera
+      scene.add(shreejaRoot);
+
+      shreejaMixer = new THREE.AnimationMixer(shreejaRoot);
+      shreejaGltf.animations.forEach((clip) => {
+        const action = shreejaMixer.clipAction(clip);
+        shreejaActions[clip.name] = action;
+        if (clip.name === 'punch') punchDuration = clip.duration;
+      });
+
+      // Find bones
+      shreejaRoot.traverse((c) => {
+        if (c.isBone && c.name === 'mixamorigHead') shreejaHeadBone = c;
+        if (c.isBone && c.name === 'mixamorigRightHand') shreejaGloveBone = c;
+        if (c.isBone && (c.name === 'mixamorigRightHand' || c.name === 'mixamorigLeftHand')) {
+          const glove = makeGlove(0xff2d87);
+          glove.position.set(0, 10, 0);
+          c.add(glove);
+        }
+      });
+
+      // Attach face disc to Shreeja's head bone
+      if (shreejaHeadBone) {
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(14, 32), gFaceMat);
+        disc.position.set(0, 8, 14);
+        shreejaHeadBone.add(disc);
+      }
+
+      // Start idle
+      if (shreejaActions['idle']) {
+        shreejaActions['idle'].setLoop(THREE.LoopRepeat);
+        shreejaActions['idle'].play();
+      }
+
+      // Setup Sanjay
+      sanjayRoot = sanjayGltf.scene;
+      sanjayRoot.position.set(BX, 0, 0);
+      sanjayRoot.rotation.y = -1.15; // 3/4 facing Shreeja and camera
+      scene.add(sanjayRoot);
+
+      sanjayMixer = new THREE.AnimationMixer(sanjayRoot);
+      sanjayGltf.animations.forEach((clip) => {
+        const action = sanjayMixer.clipAction(clip);
+        sanjayActions[clip.name] = action;
+      });
+
+      sanjayRoot.traverse((c) => {
+        if (c.isBone && c.name === 'mixamorigHead') sanjayHeadBone = c;
+        if (c.isBone && (c.name === 'mixamorigRightHand' || c.name === 'mixamorigLeftHand')) {
+          const glove = makeGlove(0x1565c0);
+          glove.position.set(0, 10, 0);
+          c.add(glove);
+        }
+      });
+
+      // Attach face disc to Sanjay's head bone
+      if (sanjayHeadBone) {
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(14, 32), bFaceMat);
+        disc.position.set(0, 8, 14);
+        sanjayHeadBone.add(disc);
+      }
+
+      // Start idle
+      if (sanjayActions['idle']) {
+        sanjayActions['idle'].setLoop(THREE.LoopRepeat);
+        sanjayActions['idle'].play();
+      }
+
+      modelsLoaded = true;
+
+      // Hide loading overlay
+      if (loadingEl.parentNode) loadingEl.parentNode.removeChild(loadingEl);
+    })
+    .catch((err) => {
+      console.error('Error loading characters:', err);
+      loadingEl.innerHTML = '<span>Error loading ring</span>';
+    });
+
+  // Star particles for punch impact
   const parts = [];
   const starGeo = new THREE.OctahedronGeometry(0.1);
   const starMat = new THREE.MeshBasicMaterial({ color: 0xffd23f });
@@ -166,56 +223,98 @@ export function createGame(container, overlay, { onImpact, onReady }) {
   ro.observe(container);
   resize();
 
-  function impact() {
-    ht = 1;
-    shk = 0.3;
+  function triggerImpact() {
+    ht = 1.0;
+    shk = 0.35;
+
+    // Position of impact around Sanjay's face
+    const impactPoint = new THREE.Vector3();
+    if (sanjayHeadBone) {
+      sanjayHeadBone.getWorldPosition(impactPoint);
+      impactPoint.z += 0.1;
+    } else {
+      impactPoint.set(BX - 0.3, 1.7, 0.3);
+    }
+
     for (let i = 0; i < 9; i++) {
       const m = new THREE.Mesh(starGeo, starMat);
-      m.position.set(BX - 0.4, 2.4, 0.6);
+      m.position.copy(impactPoint);
       scene.add(m);
-      parts.push({ m, vx: (Math.random() - 0.2) * 4, vy: Math.random() * 4 + 1, vz: Math.random() * 2, l: 0.7 });
+      parts.push({
+        m,
+        vx: (Math.random() - 0.2) * 4,
+        vy: Math.random() * 4 + 1,
+        vz: Math.random() * 2,
+        l: 0.7,
+      });
     }
-    onImpact(proj(new THREE.Vector3(BX - 0.3, 2.5, 0.6)));
+
+    onImpact(proj(impactPoint));
+
+    // Sanjay reaction
+    if (ko) {
+      if (sanjayActions['idle']) sanjayActions['idle'].stop();
+      if (sanjayActions['hit']) sanjayActions['hit'].stop();
+      if (sanjayActions['defeated']) {
+        sanjayActions['defeated'].reset();
+        sanjayActions['defeated'].setLoop(THREE.LoopOnce, 1);
+        sanjayActions['defeated'].clampWhenFinished = true;
+        sanjayActions['defeated'].play();
+      }
+    } else {
+      if (sanjayActions['hit']) {
+        if (sanjayActions['idle']) sanjayActions['idle'].stop();
+        sanjayActions['hit'].reset();
+        sanjayActions['hit'].setLoop(THREE.LoopOnce, 1);
+        sanjayActions['hit'].clampWhenFinished = false;
+        sanjayActions['hit'].play();
+      }
+    }
   }
 
   let last = performance.now();
   let firstFrame = true;
+
   function loop(now) {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    t0 += dt;
 
-    girl.g.position.y = Math.sin(t0 * 6) * 0.04;
-    boy.g.position.y = Math.sin(t0 * 5 + 1) * 0.03;
+    // Update animation mixers
+    if (shreejaMixer) shreejaMixer.update(dt);
+    if (sanjayMixer) sanjayMixer.update(dt);
 
-    let k = 0;
-    if (pt >= 0) {
-      pt += dt / 0.28;
-      k = Math.sin(Math.min(pt, 1) * Math.PI);
-      if (!hitDone && pt >= 0.5) {
+    // Punch timing logic
+    if (isPunching) {
+      punchProgress += dt;
+      // Glove connects halfway through the jab/cross animation
+      if (!hitDone && punchProgress >= 0.52) {
         hitDone = true;
-        impact();
+        triggerImpact();
       }
-      if (pt >= 1) pt = -1;
+      if (punchProgress >= punchDuration) {
+        isPunching = false;
+        if (shreejaActions['punch']) shreejaActions['punch'].stop();
+        if (shreejaActions['idle']) {
+          shreejaActions['idle'].reset().fadeIn(0.15).play();
+        }
+      }
     }
-    girl.g.position.x = GX + 1.0 * k;
-    girl.g.rotation.y = 0.45 + 0.25 * k;
-    girl.arms[1].rotation.x = -1.1 - 0.47 * k;
-    girl.arms[1].rotation.z = -0.1 * k;
 
-    ht = Math.max(0, ht - dt * 2.2);
-    boy.g.position.x = BX + 0.8 * ht;
-    boy.g.rotation.z = -0.3 * ht + (ko ? -1.45 : 0);
-    boy.head.rotation.z = Math.sin(t0 * 40) * 0.25 * ht;
-    boy.head.rotation.x = -0.3 * ht;
-    boy.arms[0].rotation.z = -1.2 * ht;
-    boy.arms[1].rotation.z = 1.2 * ht;
-    boy.fm.color.setRGB(1, 1 - 0.6 * ht, 1 - 0.6 * ht);
+    // Hit fadeout & return to idle for Sanjay
+    if (ht > 0) {
+      ht = Math.max(0, ht - dt * 2.0);
+      bFaceMat.color.setRGB(1, 1 - 0.6 * ht, 1 - 0.6 * ht);
+      if (!ko && ht === 0 && sanjayActions['hit'] && !sanjayActions['hit'].isRunning()) {
+        if (sanjayActions['idle']) sanjayActions['idle'].reset().fadeIn(0.15).play();
+      }
+    }
 
-    shk = Math.max(0, shk - dt * 1.2);
+    // Camera shake
+    shk = Math.max(0, shk - dt * 1.5);
     cam.position.x = (Math.random() - 0.5) * shk;
 
+    // Update stars
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i];
       p.l -= dt;
@@ -230,7 +329,7 @@ export function createGame(container, overlay, { onImpact, onReady }) {
       }
     }
 
-    // Sanjay's face reacts: calmer -> stressed, 😣 on hits, 😭 only on KO
+    // Sanjay face emoji updates
     const key = `${Math.round(mood * 25)}:${ht > 0.35 ? 1 : 0}:${ko ? 1 : 0}`;
     if (!bFace.img && key !== boyKey) {
       boyKey = key;
@@ -238,12 +337,33 @@ export function createGame(container, overlay, { onImpact, onReady }) {
       drawFace(bFace);
     }
 
-    // HTML overlay (name callouts + sorry bubble) follows the 3D heads
+    // Position HTML tags and sorry bubble based on 3D head bone locations
     const w = container.clientWidth;
     const clampX = (x, m) => `${Math.max(m, Math.min(w - m, x))}px`;
-    const gp = proj(new THREE.Vector3(girl.g.position.x, 3.0, 0));
-    const bq = proj(new THREE.Vector3(boy.g.position.x, 3.4, 0));
-    const bp = proj(new THREE.Vector3(boy.g.position.x, 4.05, 0));
+
+    const gHeadPos = new THREE.Vector3();
+    if (shreejaHeadBone) {
+      shreejaHeadBone.getWorldPosition(gHeadPos);
+      gHeadPos.y += 0.45;
+    } else {
+      gHeadPos.set(GX, 2.2, 0);
+    }
+    const gp = proj(gHeadPos);
+
+    const bHeadPos = new THREE.Vector3();
+    if (sanjayHeadBone) {
+      sanjayHeadBone.getWorldPosition(bHeadPos);
+    } else {
+      bHeadPos.set(BX, 2.2, 0);
+    }
+    const bTagPos = bHeadPos.clone();
+    bTagPos.y += 0.45;
+    const bubblePos = bHeadPos.clone();
+    bubblePos.y += 0.95;
+
+    const bq = proj(bTagPos);
+    const bp = proj(bubblePos);
+
     if (overlay.gTag) {
       overlay.gTag.style.left = clampX(gp.x, 45);
       overlay.gTag.style.top = `${gp.y}px`;
@@ -258,24 +378,56 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     }
 
     renderer.render(scene, cam);
-    if (firstFrame) {
+
+    if (firstFrame && modelsLoaded) {
       firstFrame = false;
       onReady?.();
     }
   }
-  raf = requestAnimationFrame(loop);
+  let raf = requestAnimationFrame(loop);
 
   return {
-    canPunch: () => pt < 0 && !ko,
+    canPunch: () => modelsLoaded && !isPunching && !ko,
     punch() {
-      pt = 0;
+      if (!modelsLoaded || isPunching || ko) return;
+      isPunching = true;
+      punchProgress = 0;
       hitDone = false;
+
+      if (shreejaActions['idle']) shreejaActions['idle'].stop();
+      if (shreejaActions['punch']) {
+        shreejaActions['punch'].reset();
+        shreejaActions['punch'].setLoop(THREE.LoopOnce, 1);
+        shreejaActions['punch'].clampWhenFinished = false;
+        shreejaActions['punch'].play();
+      }
     },
     setMood(m) {
       mood = m;
     },
     setKO(v) {
       ko = v;
+      if (v) {
+        if (sanjayActions['idle']) sanjayActions['idle'].stop();
+        if (sanjayActions['hit']) sanjayActions['hit'].stop();
+        if (sanjayActions['defeated']) {
+          sanjayActions['defeated'].reset();
+          sanjayActions['defeated'].setLoop(THREE.LoopOnce, 1);
+          sanjayActions['defeated'].clampWhenFinished = true;
+          sanjayActions['defeated'].play();
+        }
+      } else {
+        // Round 2 reset
+        if (sanjayActions['defeated']) sanjayActions['defeated'].stop();
+        if (sanjayActions['hit']) sanjayActions['hit'].stop();
+        if (shreejaActions['punch']) shreejaActions['punch'].stop();
+        isPunching = false;
+        hitDone = false;
+        ht = 0;
+        mood = 0;
+        if (sanjayActions['idle']) sanjayActions['idle'].reset().fadeIn(0.2).play();
+        if (shreejaActions['idle']) shreejaActions['idle'].reset().fadeIn(0.2).play();
+      }
     },
     setPhoto(kind, img) {
       const f = kind === 'g' ? gFace : bFace;
@@ -285,8 +437,24 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     dispose() {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      if (shreejaMixer) shreejaMixer.stopAllAction();
+      if (sanjayMixer) sanjayMixer.stopAllAction();
+      scene.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+          else obj.material.dispose();
+        }
+      });
+      gFace.t.dispose();
+      bFace.t.dispose();
       renderer.dispose();
-      renderer.domElement.remove();
+      if (renderer.domElement && renderer.domElement.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+      }
+      if (loadingEl.parentNode) {
+        loadingEl.parentNode.removeChild(loadingEl);
+      }
     },
   };
 }
