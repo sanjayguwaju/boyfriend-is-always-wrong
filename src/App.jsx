@@ -133,7 +133,7 @@ export default function App() {
     }
     setIsNewBest(newBest);
     playKO();
-    setTimeout(() => setPhase(PHASES.KO), 800);
+    setTimeout(() => setPhase(PHASES.KO), 2000);
   }, [stopTimer]);
 
   // ── Impact callback (called by Three.js engine) ──────────────────────────────

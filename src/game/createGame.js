@@ -24,7 +24,7 @@ export function createGame(container, overlay, { onImpact, onReady }) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  container.appendChild(renderer.domElement);
+  container.insertBefore(renderer.domElement, container.firstChild);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1b1030);
@@ -78,10 +78,32 @@ export function createGame(container, overlay, { onImpact, onReady }) {
 
   // Glove mesh helper
   const makeGlove = (color) => {
-    return new THREE.Mesh(
-      new THREE.SphereGeometry(14, 16, 14),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.1 })
+    const group = new THREE.Group();
+    // Main padded boxing glove
+    const mitt = new THREE.Mesh(
+      new THREE.SphereGeometry(14, 20, 18),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.12 })
     );
+    mitt.scale.set(1.05, 1.25, 0.95);
+    group.add(mitt);
+
+    // Thumb section
+    const thumb = new THREE.Mesh(
+      new THREE.SphereGeometry(6.5, 16, 14),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.12 })
+    );
+    thumb.position.set(-6, 2, 4);
+    group.add(thumb);
+
+    // White wristband / cuff
+    const cuff = new THREE.Mesh(
+      new THREE.CylinderGeometry(10.5, 11.5, 7, 20),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
+    );
+    cuff.position.set(0, -9, 0);
+    group.add(cuff);
+
+    return group;
   };
 
   // Animation states & references
@@ -134,7 +156,7 @@ export function createGame(container, overlay, { onImpact, onReady }) {
           isPunching = false;
           if (shreejaRoot) shreejaRoot.position.x = GX;
           if (shreejaActions['idle']) {
-            shreejaActions['idle'].reset().fadeIn(0.2).play();
+            shreejaActions['idle'].reset().setEffectiveWeight(1).play();
           }
         }
       });
@@ -183,7 +205,7 @@ export function createGame(container, overlay, { onImpact, onReady }) {
             sanjayRoot.rotation.z = 0;
           }
           if (sanjayActions['idle']) {
-            sanjayActions['idle'].reset().fadeIn(0.2).play();
+            sanjayActions['idle'].reset().setEffectiveWeight(1).play();
           }
         }
       });
@@ -252,6 +274,7 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     shk = 0.35;
 
     // Position of impact around Sanjay's face
+    if (sanjayRoot) sanjayRoot.updateWorldMatrix(true, false);
     const impactPoint = new THREE.Vector3();
     if (sanjayHeadBone) {
       sanjayHeadBone.getWorldPosition(impactPoint);
@@ -277,21 +300,21 @@ export function createGame(container, overlay, { onImpact, onReady }) {
 
     // Sanjay reaction
     if (ko) {
-      if (sanjayActions['idle']) sanjayActions['idle'].stop();
-      if (sanjayActions['hit']) sanjayActions['hit'].stop();
+      if (sanjayActions['idle']?.isRunning()) sanjayActions['idle'].fadeOut(0.2);
+      if (sanjayActions['hit']?.isRunning()) sanjayActions['hit'].stop();
       if (sanjayActions['defeated']) {
         sanjayActions['defeated'].reset();
         sanjayActions['defeated'].setLoop(THREE.LoopOnce, 1);
         sanjayActions['defeated'].clampWhenFinished = true;
-        sanjayActions['defeated'].play();
+        sanjayActions['defeated'].fadeIn(0.2).play();
       }
     } else {
       if (sanjayActions['hit']) {
-        if (sanjayActions['idle']) sanjayActions['idle'].stop();
+        if (sanjayActions['idle']?.isRunning()) sanjayActions['idle'].fadeOut(0.12);
         sanjayActions['hit'].reset();
         sanjayActions['hit'].setLoop(THREE.LoopOnce, 1);
         sanjayActions['hit'].clampWhenFinished = false;
-        sanjayActions['hit'].play();
+        sanjayActions['hit'].fadeIn(0.12).play();
       }
     }
   }
@@ -323,9 +346,11 @@ export function createGame(container, overlay, { onImpact, onReady }) {
       if (punchProgress >= punchDuration) {
         isPunching = false;
         if (shreejaRoot) shreejaRoot.position.x = GX;
-        if (shreejaActions['punch']) shreejaActions['punch'].stop();
+        if (shreejaActions['punch']?.isRunning()) {
+          shreejaActions['punch'].stop();
+        }
         if (shreejaActions['idle']) {
-          shreejaActions['idle'].reset().fadeIn(0.15).play();
+          shreejaActions['idle'].reset().setEffectiveWeight(1).play();
         }
       }
     }
@@ -344,12 +369,16 @@ export function createGame(container, overlay, { onImpact, onReady }) {
       }
     }
 
-    // Always ensure idle is active when not performing another action
-    if (!ko && sanjayActions['idle'] && !sanjayActions['idle'].isRunning() && !sanjayActions['hit']?.isRunning()) {
-      sanjayActions['idle'].reset().fadeIn(0.15).play();
+    // Always ensure idle is active with full weight when not performing an action
+    if (!ko && sanjayActions['idle'] && !sanjayActions['hit']?.isRunning()) {
+      if (!sanjayActions['idle'].isRunning() || sanjayActions['idle'].getEffectiveWeight() < 0.5) {
+        sanjayActions['idle'].reset().setEffectiveWeight(1).play();
+      }
     }
-    if (shreejaActions['idle'] && !shreejaActions['idle'].isRunning() && !isPunching) {
-      shreejaActions['idle'].reset().fadeIn(0.15).play();
+    if (!isPunching && shreejaActions['idle']) {
+      if (!shreejaActions['idle'].isRunning() || shreejaActions['idle'].getEffectiveWeight() < 0.5) {
+        shreejaActions['idle'].reset().setEffectiveWeight(1).play();
+      }
     }
 
     // Camera shake
@@ -382,6 +411,10 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     // Position HTML tags and sorry bubble based on 3D head bone locations
     const w = container.clientWidth;
     const clampX = (x, m) => `${Math.max(m, Math.min(w - m, x))}px`;
+
+    // Synchronize world matrices before computing 3D bone projections
+    if (shreejaRoot) shreejaRoot.updateWorldMatrix(true, false);
+    if (sanjayRoot) sanjayRoot.updateWorldMatrix(true, false);
 
     const gHeadPos = new THREE.Vector3();
     if (shreejaHeadBone) {
@@ -436,12 +469,12 @@ export function createGame(container, overlay, { onImpact, onReady }) {
       punchProgress = 0;
       hitDone = false;
 
-      if (shreejaActions['idle']) shreejaActions['idle'].stop();
+      if (shreejaActions['idle']?.isRunning()) shreejaActions['idle'].fadeOut(0.12);
       if (shreejaActions['punch']) {
         shreejaActions['punch'].reset();
         shreejaActions['punch'].setLoop(THREE.LoopOnce, 1);
         shreejaActions['punch'].clampWhenFinished = false;
-        shreejaActions['punch'].play();
+        shreejaActions['punch'].fadeIn(0.12).play();
       }
     },
     setMood(m) {
@@ -450,13 +483,20 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     setKO(v) {
       ko = v;
       if (v) {
-        if (sanjayActions['idle']) sanjayActions['idle'].stop();
-        if (sanjayActions['hit']) sanjayActions['hit'].stop();
+        if (sanjayActions['idle']?.isRunning()) sanjayActions['idle'].stop();
+        if (sanjayActions['hit']?.isRunning()) sanjayActions['hit'].stop();
         if (sanjayActions['defeated']) {
           sanjayActions['defeated'].reset();
           sanjayActions['defeated'].setLoop(THREE.LoopOnce, 1);
           sanjayActions['defeated'].clampWhenFinished = true;
-          sanjayActions['defeated'].play();
+          sanjayActions['defeated'].setEffectiveWeight(1).play();
+        }
+        // Ensure Shreeja resets to idle ready stance
+        if (shreejaActions['punch']?.isRunning()) shreejaActions['punch'].stop();
+        isPunching = false;
+        if (shreejaRoot) shreejaRoot.position.x = GX;
+        if (shreejaActions['idle']) {
+          shreejaActions['idle'].reset().setEffectiveWeight(1).play();
         }
       } else {
         // Round 2 reset
@@ -475,8 +515,8 @@ export function createGame(container, overlay, { onImpact, onReady }) {
           shreejaRoot.position.set(GX, 0, 0);
           shreejaRoot.rotation.set(0, 0.52, 0);
         }
-        if (sanjayActions['idle']) sanjayActions['idle'].reset().fadeIn(0.2).play();
-        if (shreejaActions['idle']) shreejaActions['idle'].reset().fadeIn(0.2).play();
+        if (sanjayActions['idle']) sanjayActions['idle'].reset().setEffectiveWeight(1).play();
+        if (shreejaActions['idle']) shreejaActions['idle'].reset().setEffectiveWeight(1).play();
       }
     },
     setPhoto(kind, img) {
