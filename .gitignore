@@ -1,3 +1,16 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
+
+# macOS
 .DS_Store
+
+# Netlify
+.netlify
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+.env.production
