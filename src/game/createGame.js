@@ -12,7 +12,7 @@ const BOY_FACES = ['👨', '😅', '😬', '😣', '😖', '😫'];
  * Creates the 3D boxing ring and both fighters inside `container`.
  * `overlay` holds DOM nodes the engine positions every frame: { gTag, bTag, bubble }.
  */
-export function createGame(container, overlay, { onImpact }) {
+export function createGame(container, overlay, { onImpact, onReady }) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -179,6 +179,7 @@ export function createGame(container, overlay, { onImpact }) {
   }
 
   let last = performance.now();
+  let firstFrame = true;
   function loop(now) {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -257,6 +258,10 @@ export function createGame(container, overlay, { onImpact }) {
     }
 
     renderer.render(scene, cam);
+    if (firstFrame) {
+      firstFrame = false;
+      onReady?.();
+    }
   }
   raf = requestAnimationFrame(loop);
 
