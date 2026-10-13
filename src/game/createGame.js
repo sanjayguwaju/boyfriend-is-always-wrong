@@ -6,8 +6,8 @@ import { createFace, drawFace } from './faces.js';
 // Match the flat, bright look of the original prototype.
 THREE.ColorManagement.enabled = false;
 
-const GX = -1.6; // Shreeja's ring position
-const BX = 1.6;  // Sanjay's ring position
+const GX = -1.1; // Shreeja's ring position
+const BX = 1.0;  // Sanjay's ring position
 const BOY_FACES = ['👨', '😅', '😬', '😣', '😖', '😫'];
 
 /**
@@ -117,8 +117,9 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     .then(([shreejaGltf, sanjayGltf]) => {
       // Setup Shreeja
       shreejaRoot = shreejaGltf.scene;
+      shreejaRoot.scale.setScalar(1.2);
       shreejaRoot.position.set(GX, 0, 0);
-      shreejaRoot.rotation.y = 1.15; // 3/4 facing Sanjay and camera
+      shreejaRoot.rotation.y = 0.52; // 3/4 facing Sanjay and camera
       scene.add(shreejaRoot);
 
       shreejaMixer = new THREE.AnimationMixer(shreejaRoot);
@@ -126,6 +127,16 @@ export function createGame(container, overlay, { onImpact, onReady }) {
         const action = shreejaMixer.clipAction(clip);
         shreejaActions[clip.name] = action;
         if (clip.name === 'punch') punchDuration = clip.duration;
+      });
+
+      shreejaMixer.addEventListener('finished', (e) => {
+        if (e.action === shreejaActions['punch']) {
+          isPunching = false;
+          if (shreejaRoot) shreejaRoot.position.x = GX;
+          if (shreejaActions['idle']) {
+            shreejaActions['idle'].reset().fadeIn(0.2).play();
+          }
+        }
       });
 
       // Find bones
@@ -141,8 +152,8 @@ export function createGame(container, overlay, { onImpact, onReady }) {
 
       // Attach face disc to Shreeja's head bone
       if (shreejaHeadBone) {
-        const disc = new THREE.Mesh(new THREE.CircleGeometry(14, 32), gFaceMat);
-        disc.position.set(0, 8, 14);
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(18, 32), gFaceMat);
+        disc.position.set(0, 10, 22);
         shreejaHeadBone.add(disc);
       }
 
@@ -154,14 +165,27 @@ export function createGame(container, overlay, { onImpact, onReady }) {
 
       // Setup Sanjay
       sanjayRoot = sanjayGltf.scene;
+      sanjayRoot.scale.setScalar(1.2);
       sanjayRoot.position.set(BX, 0, 0);
-      sanjayRoot.rotation.y = -1.15; // 3/4 facing Shreeja and camera
+      sanjayRoot.rotation.y = -0.52; // 3/4 facing Shreeja and camera
       scene.add(sanjayRoot);
 
       sanjayMixer = new THREE.AnimationMixer(sanjayRoot);
       sanjayGltf.animations.forEach((clip) => {
         const action = sanjayMixer.clipAction(clip);
         sanjayActions[clip.name] = action;
+      });
+
+      sanjayMixer.addEventListener('finished', (e) => {
+        if (e.action === sanjayActions['hit'] && !ko) {
+          if (sanjayRoot) {
+            sanjayRoot.position.x = BX;
+            sanjayRoot.rotation.z = 0;
+          }
+          if (sanjayActions['idle']) {
+            sanjayActions['idle'].reset().fadeIn(0.2).play();
+          }
+        }
       });
 
       sanjayRoot.traverse((c) => {
@@ -175,8 +199,8 @@ export function createGame(container, overlay, { onImpact, onReady }) {
 
       // Attach face disc to Sanjay's head bone
       if (sanjayHeadBone) {
-        const disc = new THREE.Mesh(new THREE.CircleGeometry(14, 32), bFaceMat);
-        disc.position.set(0, 8, 14);
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(18, 32), bFaceMat);
+        disc.position.set(0, 10, 22);
         sanjayHeadBone.add(disc);
       }
 
@@ -214,9 +238,9 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     if (!w || !h) return;
     renderer.setSize(w, h, false);
     cam.aspect = w / h;
-    const d = Math.max(8.6, 9.2 / cam.aspect);
-    cam.position.set(0, 2.8 + d * 0.05, d);
-    cam.lookAt(0, 1.5, 0);
+    const d = Math.max(6.8, 7.2 / cam.aspect);
+    cam.position.set(0, 2.4 + d * 0.05, d);
+    cam.lookAt(0, 1.35, 0);
     cam.updateProjectionMatrix();
   }
   const ro = new ResizeObserver(resize);
@@ -287,13 +311,18 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     // Punch timing logic
     if (isPunching) {
       punchProgress += dt;
+      const k = Math.sin(Math.min(punchProgress / (punchDuration * 0.7), 1) * Math.PI);
+      if (shreejaRoot) {
+        shreejaRoot.position.x = GX + 0.35 * k;
+      }
       // Glove connects halfway through the jab/cross animation
-      if (!hitDone && punchProgress >= 0.52) {
+      if (!hitDone && punchProgress >= 0.50) {
         hitDone = true;
         triggerImpact();
       }
       if (punchProgress >= punchDuration) {
         isPunching = false;
+        if (shreejaRoot) shreejaRoot.position.x = GX;
         if (shreejaActions['punch']) shreejaActions['punch'].stop();
         if (shreejaActions['idle']) {
           shreejaActions['idle'].reset().fadeIn(0.15).play();
@@ -304,10 +333,23 @@ export function createGame(container, overlay, { onImpact, onReady }) {
     // Hit fadeout & return to idle for Sanjay
     if (ht > 0) {
       ht = Math.max(0, ht - dt * 2.0);
-      bFaceMat.color.setRGB(1, 1 - 0.6 * ht, 1 - 0.6 * ht);
-      if (!ko && ht === 0 && sanjayActions['hit'] && !sanjayActions['hit'].isRunning()) {
-        if (sanjayActions['idle']) sanjayActions['idle'].reset().fadeIn(0.15).play();
+      if (sanjayRoot && !ko) {
+        sanjayRoot.position.x = BX + 0.25 * ht;
+        sanjayRoot.rotation.z = -0.15 * ht;
       }
+      bFaceMat.color.setRGB(1, 1 - 0.6 * ht, 1 - 0.6 * ht);
+      if (ht === 0 && sanjayRoot && !ko) {
+        sanjayRoot.position.x = BX;
+        sanjayRoot.rotation.z = 0;
+      }
+    }
+
+    // Always ensure idle is active when not performing another action
+    if (!ko && sanjayActions['idle'] && !sanjayActions['idle'].isRunning() && !sanjayActions['hit']?.isRunning()) {
+      sanjayActions['idle'].reset().fadeIn(0.15).play();
+    }
+    if (shreejaActions['idle'] && !shreejaActions['idle'].isRunning() && !isPunching) {
+      shreejaActions['idle'].reset().fadeIn(0.15).play();
     }
 
     // Camera shake
@@ -425,6 +467,14 @@ export function createGame(container, overlay, { onImpact, onReady }) {
         hitDone = false;
         ht = 0;
         mood = 0;
+        if (sanjayRoot) {
+          sanjayRoot.position.set(BX, 0, 0);
+          sanjayRoot.rotation.set(0, -0.52, 0);
+        }
+        if (shreejaRoot) {
+          shreejaRoot.position.set(GX, 0, 0);
+          shreejaRoot.rotation.set(0, 0.52, 0);
+        }
         if (sanjayActions['idle']) sanjayActions['idle'].reset().fadeIn(0.2).play();
         if (shreejaActions['idle']) shreejaActions['idle'].reset().fadeIn(0.2).play();
       }
