@@ -15,5 +15,6 @@ dist
 .env.local
 .env.production
 
-# Archives
+# Archives and local docs
 *.zip
+*.pdf
